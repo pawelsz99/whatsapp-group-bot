@@ -12,6 +12,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import P from 'pino';
 import * as fs from 'fs';
+import QRCode from 'qrcode';
 
 const app = express();
 app.use(express.json());
@@ -53,8 +54,7 @@ async function connectWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      const QRCode = await import('qrcode');
-      qrCodeDataUrl = await QRCode.default.toDataURL(qr);
+      qrCodeDataUrl = await QRCode.toDataURL(qr);
       console.log('QR Code ready! Open http://localhost:3000/qr');
     }
 
