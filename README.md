@@ -1,27 +1,26 @@
 # WhatsApp Weekly Event Bot
 
-A simple bot that posts weekly events to a WhatsApp group with "Going" / "Not Going" RSVP functionality.
+A bot that creates real WhatsApp events in your group with "Going" / "Not Going" RSVP functionality.
 
 ## How It Works
 
 - **WhatsApp Connection**: Uses Baileys library to connect to WhatsApp Web (no business account needed)
-- **Weekly Events**: Posts event message every week using node-cron scheduler
-- **Interactive RSVP**: Sends message with inline buttons for "Going" / "Not Going"
-- **Tracks Responses**: Stores RSVPs in a JSON file
+- **Real WhatsApp Events**: Creates native WhatsApp events that appear in the group
+- **RSVP**: Group members can tap "Going" or "Not Going" directly in WhatsApp
+- **Web Interface**: Simple UI to create events and send messages
 
 ## Tech Stack
 
 - **Language**: TypeScript
-- **WhatsApp Library**: Baileys (`@adiwajshing/baileys`)
+- **WhatsApp Library**: `@whiskeysockets/baileys`
 - **Server**: Express.js
-- **Scheduler**: node-cron
-- **Hosting**: Render.com or Fly.io (free tier)
+- **Package Manager**: mise
 
 ## Requirements
 
-- [mise](https://mise.jdx.dev/) - Version manager for Node.js, etc.
-- Regular WhatsApp account (personal account works)
-- GitHub account (for deployment)
+- [mise](https://mise.jdx.dev/) - Version manager
+- Regular WhatsApp account (personal works)
+- Group must be part of a Community (for events feature)
 
 ## Setup
 
@@ -35,113 +34,129 @@ curl https://mise.jdx.dev/install.sh | sh
 brew install mise
 ```
 
-### 2. Local Development
+### 2. Clone & Install
 
 ```bash
-# Clone the repository
 git clone <your-repo>
 cd whatsappbot
 
-# Install Node.js via mise
-mise use -g node
-
 # Install dependencies
 mise run -- npm install
+```
 
-# Copy environment file
+### 3. Configure
+
+Copy and edit `.env` file:
+
+```bash
 cp .env.example .env
+```
 
-# Edit .env with your settings
-# - GROUP_JID: Your WhatsApp group JID (format: groupname@g.us)
-# - CRON_SCHEDULE: Cron expression for when to post event
-# - EVENT_MESSAGE: The event text to post
+Set your `GROUP_JID` in `.env`:
+```
+GROUP_JID=120363405829555887@g.us
+```
 
-# Run the bot (uses mise to run with correct node version)
+### 4. Run
+
+```bash
 mise run dev
 ```
 
-### 2. Connect WhatsApp
+### 5. Connect WhatsApp
 
-1. Run the bot locally
-2. A QR code will appear in terminal
-3. Scan it with your WhatsApp (Settings → Linked Devices → Link Device)
-4. The session will be saved locally in `auth_info/` folder
+1. Open http://localhost:3000/qr in your browser
+2. Scan QR code with WhatsApp: Settings → Linked Devices → Link Device
+3. Session saves automatically in `auth_info/` folder
 
-### 3. Deploy to Cloud (Free)
+## Web Interface
 
-#### Option A: Render.com
+Visit http://localhost:3000 to:
+- View QR code
+- Send messages to group
+- Create custom events
+- Create weekly event (one click)
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Web interface |
+| GET | `/qr` | View QR code |
+| GET | `/status` | Check connection status |
+| GET | `/groups` | List all groups |
+| POST | `/send` | Send message |
+| POST | `/event` | Create custom event |
+| POST | `/event/weekly` | Create weekly event (next day 19:00) |
+
+### Examples
+
+```bash
+# Send a message
+curl -X POST http://localhost:3000/send \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello!"}'
+
+# Create custom event
+curl -X POST http://localhost:3000/event \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Pizza Night", "description": "Bring snacks!", "startDate": "2026-03-15T19:00"}'
+
+# Create weekly event (tomorrow at 19:00)
+curl -X POST http://localhost:3000/event/weekly
+```
+
+## Event Request Format
+
+For `/event` endpoint:
+
+```json
+{
+  "jid": "120363405829555887@g.us",
+  "name": "Pizza Night",
+  "description": "Bring snacks!",
+  "startDate": "2026-03-15T19:00"
+}
+```
+
+## Deployment
+
+### Render.com
 
 1. Push code to GitHub
 2. Create account at render.com
-3. Create new Web Service
-4. Connect your GitHub repo
-5. Set build command: `npm install`
-6. Set start command: `npm start`
-7. Add environment variables in Render dashboard
+3. Create Web Service → connect repo
+4. Build: `npm install`
+5. Start: `npm run build && npm start`
+6. Add `GROUP_JID` env var
 
-#### Option B: Fly.io
+### Fly.io
 
-1. Install flyctl: `curl -L https://fly.io/install.sh | sh`
-2. Run `fly launch`
-3. Follow prompts - choose "Yes" for HTTP service
-4. Run `fly deploy`
-
-**Note**: For cloud deployment, you'll need persistent storage for the auth session. Use Render's persistent disk or Fly's volume.
-
-## Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `GROUP_JID` | WhatsApp group JID | `1234567890@g.us` |
-| `CRON_SCHEDULE` | When to post event (default: every Friday 6pm) | `0 18 * * 5` |
-| `EVENT_TITLE` | Event title | `Friday Pizza Night` |
-| `EVENT_MESSAGE` | Full event message text | See .env.example |
-
-## Cron Schedule Examples
-
-- `0 18 * * 5` - Every Friday at 6 PM
-- `0 10 * * 1` - Every Monday at 10 AM
-- `0 12 1 * *` - First day of every month at noon
-
-## Project Structure
-
-```
-whatsappbot/
-├── src/
-│   ├── index.ts          # Main entry point
-│   ├── bot.ts            # WhatsApp bot logic
-│   ├── scheduler.ts      # Weekly event scheduler
-│   ├── rsvp.ts           # Handle RSVP responses
-│   └── storage.ts        # JSON file storage
-├── auth_info/            # WhatsApp session (auto-generated)
-├── .env                 # Your settings
-├── package.json
-└── tsconfig.json
+```bash
+curl -L https://fly.io/install.sh | sh
+fly launch
+fly deploy
 ```
 
-## Bot Features
-
-1. **Weekly Event Post**: Automatically posts to group at scheduled time
-2. **Interactive Buttons**: Users click "Going" or "Not Going"
-3. **RSVP Tracking**: Stores who responded
-4. **Session Persistence**: Stays connected across restarts
+**Note**: Auth session needs persistent storage on cloud.
 
 ## Known Limitations
 
-- Uses WhatsApp Web protocol (your phone must be online for bot to work)
-- Free hosting has limits (sleep on inactivity, limited hours)
+- Phone must be online for bot to work
+- Group must be part of a Community for events
 - WhatsApp may ban accounts using automation (use responsibly)
+- Free hosting has limits (may sleep on inactivity)
 
 ## Troubleshooting
 
-### Bot goes offline
-- Check that your phone has internet connection
-- Re-scan QR code if session expired
+### Bot disconnects
+- Check phone has internet
+- Re-scan QR code
 
-### Messages not sending
-- Verify GROUP_JID is correct
-- Make sure bot was invited to the group
+### Event creation fails
+- Make sure group is in a Community
+- Bot needs to be admin in the group
 
-### Deployment issues
-- Ensure persistent storage is configured for auth session
-- Check hosting provider logs
+### Get Group JID
+- Add bot to group
+- Visit http://localhost:3000/groups
