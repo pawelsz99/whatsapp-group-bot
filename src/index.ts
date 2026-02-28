@@ -132,6 +132,12 @@ app.get('/', (req, res) => {
       <br><br>
       <button type="submit">Create Event</button>
     </form>
+    <hr>
+    <h3>Weekly Event</h3>
+    <form action="/event/weekly" method="POST">
+      <input name="jid" placeholder="Group JID" value="${GROUP_JID}" style="width: 300px"><br><br>
+      <button type="submit">Create Weekly Event (Tomorrow 19:00)</button>
+    </form>
   `);
 });
 
@@ -196,6 +202,32 @@ app.post('/event', async (req, res) => {
     res.json({ success: true, jid: targetJid, event: name });
   } catch (error: any) {
     console.error('Event error:', error);
+    res.status(500).json({ error: String(error), details: error.message });
+  }
+});
+
+app.post('/event/weekly', async (req, res) => {
+  const targetJid = req.body.jid || GROUP_JID;
+  if (!targetJid) return res.status(400).json({ error: 'jid required' });
+
+  const now = new Date();
+  const eventDate = new Date(now);
+  eventDate.setDate(now.getDate() + 1);
+  eventDate.setHours(19, 0, 0, 0);
+
+  const name = 'Weekly Event';
+  const description = 'Join us this week!';
+
+  try {
+    console.log('Sending weekly event:', { name, description, startTime: eventDate, jid: targetJid });
+    await sendEvent(targetJid, {
+      name,
+      description,
+      startTime: eventDate
+    });
+    res.json({ success: true, jid: targetJid, event: name, scheduledFor: eventDate.toISOString() });
+  } catch (error: any) {
+    console.error('Weekly event error:', error);
     res.status(500).json({ error: String(error), details: error.message });
   }
 });
