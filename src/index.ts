@@ -84,22 +84,24 @@ async function sendMessage(jid: string, message: string) {
 interface EventDetails {
   name: string;
   description?: string;
-  startTime: number;
-  endTime?: number;
-  location?: string;
+  startTime: Date;
 }
 
 async function sendEvent(jid: string, event: EventDetails) {
   if (!sock) throw new Error('WhatsApp not connected');
 
-  const startTime = new Date(event.startTime);
-  await sock.sendMessage(jid,  { event: { name: event.name, description: event.description || '', startDate: startTime } });
+
+  await sock.sendMessage(jid, { 
+    event: { 
+      name: event.name, 
+      description: event.description || '', 
+      startDate: event.startTime
+    } 
+  });
   console.log(`Event sent to ${jid}: ${event.name}`);
 }
 
 app.get('/', (req, res) => {
-  const now = new Date();
-  const defaultDate = now.toISOString().slice(0, 16);
   res.send(`
     <h1>WhatsApp Event Bot</h1>
     <p><a href="/qr">View QR Code</a></p>
@@ -119,9 +121,15 @@ app.get('/', (req, res) => {
       <input name="jid" placeholder="Group JID" value="${GROUP_JID}" style="width: 300px"><br><br>
       <input name="name" placeholder="Event Name (e.g. Pizza Night)" style="width: 300px"><br><br>
       <input name="description" placeholder="Description" style="width: 300px"><br><br>
-      <label>Date & Time:</label><br>
-      <input type="datetime-local" name="startTime" style="width: 300px"><br><br>
-      <input name="location" placeholder="Location (optional)" style="width: 300px"><br><br>
+      <label for="startDate">Start time:</label>
+      <input
+        type="datetime-local"
+        id="startDate"
+        name="startDate"
+        step="60"
+        style="width: 300px"
+      />
+      <br><br>
       <button type="submit">Create Event</button>
     </form>
   `);
@@ -168,22 +176,22 @@ app.post('/send', async (req, res) => {
 });
 
 app.post('/event', async (req, res) => {
-  const { jid, name, description, startTime, location } = req.body;
-  if (!name || !startTime) {
-    return res.status(400).json({ error: 'name and startTime required' });
+  const { jid, name, description, startDate } = req.body;
+  if (!name || !startDate) {
+    return res.status(400).json({ error: 'name and startDate required' });
   }
   const targetJid = jid || GROUP_JID;
   if (!targetJid) return res.status(400).json({ error: 'jid required' });
 
-  const timestamp = Math.floor(new Date(startTime).getTime() / 1000);
+  const eventDate = new Date(startDate);
+
 
   try {
-    console.log('Sending event:', { name, description, startTime: timestamp, location, jid: targetJid });
+    console.log('Sending event:', { name, description, startTime: eventDate, jid: targetJid });
     await sendEvent(targetJid, {
       name,
       description,
-      startTime: timestamp,
-      location
+      startTime: eventDate
     });
     res.json({ success: true, jid: targetJid, event: name });
   } catch (error: any) {
