@@ -55,7 +55,18 @@ cp .env.example .env
 Set your `GROUP_JID` in `.env`:
 ```
 GROUP_JID=120363405829555887@g.us
+CRON_SCHEDULE=0 11 * * 3
+WEEKLY_EVENT_NAME=Weekly Event
+WEEKLY_EVENT_DESCRIPTION=Join us this week!
 ```
+
+### Cron Schedule Examples
+
+- `0 11 * * 3` - Every Wednesday at 11:00 (default)
+- `0 18 * * 5` - Every Friday at 18:00
+- `0 10 * * 1` - Every Monday at 10:00
+
+See https://crontab.guru/ for more
 
 ### 4. Run
 
