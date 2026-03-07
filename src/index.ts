@@ -1,49 +1,53 @@
-import 'dotenv/config';
-import express from 'express';
-import { Boom } from '@hapi/boom';
-import makeWASocket, { 
-  DisconnectReason, 
-  fetchLatestBaileysVersion, 
-  useMultiFileAuthState, 
+import "dotenv/config";
+import express from "express";
+import { Boom } from "@hapi/boom";
+import makeWASocket, {
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  useMultiFileAuthState,
   makeCacheableSignalKeyStore,
   proto,
   WAMessageKey,
-  WAMessageContent
-} from '@whiskeysockets/baileys';
-import P from 'pino';
-import * as fs from 'fs';
-import QRCode from 'qrcode';
-import cron from 'node-cron';
+  WAMessageContent,
+} from "@whiskeysockets/baileys";
+import P from "pino";
+import * as fs from "fs";
+import QRCode from "qrcode";
+import cron from "node-cron";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
-const GROUP_JID = process.env.GROUP_JID || '';
-const LOG_GROUP_JID = process.env.LOG_GROUP_JID || '';
+const GROUP_JID = process.env.GROUP_JID || "";
+const LOG_GROUP_JID = process.env.LOG_GROUP_JID || "";
 
 // Weekly event scheduler settings
-const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '0 11 * * 3'; // Every Wednesday at 11:00
-const WEEKLY_EVENT_NAME = process.env.WEEKLY_EVENT_NAME || 'Weekly Event';
-const WEEKLY_EVENT_DESCRIPTION = process.env.WEEKLY_EVENT_DESCRIPTION || 'Join us this week!';
-const WEEKLY_EVENT_HOUR = parseInt(process.env.WEEKLY_EVENT_HOUR || '19');
-const WEEKLY_EVENT_MINUTE = parseInt(process.env.WEEKLY_EVENT_MINUTE || '0');
-const WEEKLY_EVENT_END_HOUR = parseInt(process.env.WEEKLY_EVENT_END_HOUR || '0') || undefined;
-const WEEKLY_EVENT_END_MINUTE = parseInt(process.env.WEEKLY_EVENT_END_MINUTE || '0') || undefined;
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 11 * * 3"; // Every Wednesday at 11:00
+const WEEKLY_EVENT_NAME = process.env.WEEKLY_EVENT_NAME || "Weekly Event";
+const WEEKLY_EVENT_DESCRIPTION =
+  process.env.WEEKLY_EVENT_DESCRIPTION || "Join us this week!";
+const WEEKLY_EVENT_HOUR = parseInt(process.env.WEEKLY_EVENT_HOUR || "19");
+const WEEKLY_EVENT_MINUTE = parseInt(process.env.WEEKLY_EVENT_MINUTE || "0");
+const WEEKLY_EVENT_END_HOUR =
+  parseInt(process.env.WEEKLY_EVENT_END_HOUR || "0") || undefined;
+const WEEKLY_EVENT_END_MINUTE =
+  parseInt(process.env.WEEKLY_EVENT_END_MINUTE || "0") || undefined;
 
-const AUTH_DIR = './auth_info';
-if (!fs.existsSync(AUTH_DIR)) {
-  fs.mkdirSync(AUTH_DIR, { recursive: true });
-}
-
-const logger = P({ level: 'debug' });
+const AUTH_DIR = "./auth_info";
+const logger = P({ level: "debug" });
 
 let sock: ReturnType<typeof makeWASocket> | null = null;
 let isConnected = false;
-let qrCodeDataUrl = '';
+let qrCodeDataUrl = "";
 
 async function connectWhatsApp() {
+  if (!fs.existsSync(AUTH_DIR)) {
+    logger.info("Creating auth directory");
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
+  }
+
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   const { version } = await fetchLatestBaileysVersion();
@@ -58,36 +62,46 @@ async function connectWhatsApp() {
     getMessage,
   });
 
-  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on('connection.update', async (update) => {
+  sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
       qrCodeDataUrl = await QRCode.toDataURL(qr);
-      console.log('QR Code ready! Open http://localhost:3000/qr');
+      logger.info("QR Code ready! Open http://localhost:3000/qr");
     }
 
-    if (connection === 'close') {
+    if (connection === "close") {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      if (reason !== DisconnectReason.loggedOut) {
+
+      if (reason === DisconnectReason.loggedOut) {
+        cleanOldAuthData();
+        logger.info("Session invalidated, need to scan QR again");
+      } else {
+        logger.info("Reconnecting to WhatsApp...");
         connectWhatsApp();
       }
-    } else if (connection === 'open') {
+    } else if (connection === "open") {
       isConnected = true;
-      console.log('✓ WhatsApp connected!');
+      logger.info(" WhatsApp connected!");
     }
   });
 
   return sock;
 }
 
-async function getMessage(key: WAMessageKey): Promise<WAMessageContent | undefined> {
-  return proto.Message.create({ conversation: 'placeholder' });
+async function getMessage(
+  key: WAMessageKey,
+): Promise<WAMessageContent | undefined> {
+  return proto.Message.create({ conversation: "placeholder" });
 }
 
 async function sendMessage(jid: string, message: string) {
-  if (!sock) throw new Error('WhatsApp not connected');
+  if (!sock) {
+    logger.error("Cannot send message, WhatsApp not connected");
+    throw new Error("WhatsApp not connected");
+  }
   await sock.sendMessage(jid, { text: message });
 }
 
@@ -99,27 +113,35 @@ interface EventDetails {
 }
 
 async function sendEvent(jid: string, event: EventDetails) {
-  if (!sock) throw new Error('WhatsApp not connected');
+  if (!sock) {
+    logger.error("Cannot send event, WhatsApp not connected");
+    throw new Error("WhatsApp not connected");
+  }
 
-  const eventPayload: any = { 
-    event: { 
-      name: event.name, 
-      description: event.description || '', 
-      startDate: event.startTime
-    } 
+  const eventPayload: any = {
+    event: {
+      name: event.name,
+      description: event.description || "",
+      startDate: event.startTime,
+    },
   };
 
   if (event.endTime) {
-    eventPayload.event.endTime = String(Math.floor(event.endTime.getTime() / 1000));
+    eventPayload.event.endTime = String(
+      Math.floor(event.endTime.getTime() / 1000),
+    );
   }
 
   await sock.sendMessage(jid, eventPayload);
-  console.log(`Event sent to ${jid}: ${event.name}`);
+  logger.info(`Event sent to ${jid}: ${event.name}`);
 }
 
-app.get('/', (req, res) => {
-    const timeStr = String(WEEKLY_EVENT_HOUR).padStart(2, '0') + ':' + String(WEEKLY_EVENT_MINUTE).padStart(2, '0');
-    res.send(`
+app.get("/", (req, res) => {
+  const timeStr =
+    String(WEEKLY_EVENT_HOUR).padStart(2, "0") +
+    ":" +
+    String(WEEKLY_EVENT_MINUTE).padStart(2, "0");
+  res.send(`
     <h1>WhatsApp Event Bot</h1>
     <p><a href="/qr">View QR Code</a></p>
     <p><a href="/status">Check Status</a></p>
@@ -172,9 +194,9 @@ app.get('/', (req, res) => {
   `);
 });
 
-app.get('/qr', (req, res) => {
+app.get("/qr", (req, res) => {
   if (!qrCodeDataUrl) {
-    return res.send('Waiting for QR code... Refresh in a moment.');
+    return res.send("Waiting for QR code... Refresh in a moment.");
   }
   res.send(`
     <h1>Scan QR Code</h1>
@@ -183,26 +205,29 @@ app.get('/qr', (req, res) => {
   `);
 });
 
-app.get('/status', (req, res) => {
+app.get("/status", (req, res) => {
   res.json({ connected: isConnected, jid: GROUP_JID || null });
 });
 
-app.get('/groups', async (req, res) => {
-  if (!sock) return res.status(500).json({ error: 'Not connected' });
+app.get("/groups", async (req, res) => {
+  if (!sock) return res.status(500).json({ error: "Not connected" });
   try {
     const chats = await sock.groupFetchAllParticipating();
-    const groups = Object.values(chats).map(g => ({ name: g.subject, jid: g.id }));
+    const groups = Object.values(chats).map((g) => ({
+      name: g.subject,
+      jid: g.id,
+    }));
     res.json(groups);
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
 });
 
-app.post('/send', async (req, res) => {
+app.post("/send", async (req, res) => {
   const { jid, message } = req.body;
-  if (!message) return res.status(400).json({ error: 'message required' });
+  if (!message) return res.status(400).json({ error: "message required" });
   const targetJid = jid || GROUP_JID;
-  if (!targetJid) return res.status(400).json({ error: 'jid required' });
+  if (!targetJid) return res.status(400).json({ error: "jid required" });
 
   try {
     await sendMessage(targetJid, message);
@@ -212,32 +237,34 @@ app.post('/send', async (req, res) => {
   }
 });
 
-app.post('/event', async (req, res) => {
+app.post("/event", async (req, res) => {
   const { jid, name, description, startDate } = req.body;
   if (!name || !startDate) {
-    return res.status(400).json({ error: 'name and startDate required' });
+    return res.status(400).json({ error: "name and startDate required" });
   }
   const targetJid = jid || GROUP_JID;
-  if (!targetJid) return res.status(400).json({ error: 'jid required' });
+  if (!targetJid) return res.status(400).json({ error: "jid required" });
 
   const eventDate = new Date(startDate);
 
-
   try {
-    console.log('Sending event:', { name, description, startTime: eventDate, jid: targetJid });
+    logger.debug(
+      { name, description, startTime: eventDate, jid: targetJid },
+      "Sending event",
+    );
     await sendEvent(targetJid, {
       name,
       description,
-      startTime: eventDate
+      startTime: eventDate,
     });
     res.json({ success: true, jid: targetJid, event: name });
   } catch (error: any) {
-    console.error('Event error:', error);
+    logger.error(error, "Event error");
     res.status(500).json({ error: String(error), details: error.message });
   }
 });
 
-app.post('/api/weekly-event', async (req, res) => {
+app.post("/api/weekly-event", async (req, res) => {
   try {
     await runWeeklyEvent();
     res.json({ success: true });
@@ -248,7 +275,7 @@ app.post('/api/weekly-event', async (req, res) => {
 
 async function runWeeklyEvent() {
   if (!GROUP_JID) {
-    console.log('Weekly event skipped: GROUP_JID not set');
+    logger.info("Weekly event skipped: GROUP_JID not set");
     return;
   }
 
@@ -258,36 +285,52 @@ async function runWeeklyEvent() {
   eventDate.setHours(WEEKLY_EVENT_HOUR, WEEKLY_EVENT_MINUTE, 0, 0);
 
   let endTime: Date | undefined;
-  if (WEEKLY_EVENT_END_HOUR !== undefined && WEEKLY_EVENT_END_MINUTE !== undefined) {
+  if (
+    WEEKLY_EVENT_END_HOUR !== undefined &&
+    WEEKLY_EVENT_END_MINUTE !== undefined
+  ) {
     endTime = new Date(eventDate);
     endTime.setHours(WEEKLY_EVENT_END_HOUR, WEEKLY_EVENT_END_MINUTE, 0, 0);
   }
 
-  console.log(`Running scheduled weekly event: ${WEEKLY_EVENT_NAME} at ${eventDate.toISOString()}`);
+  logger.info(
+    `Running scheduled weekly event: ${WEEKLY_EVENT_NAME} at ${eventDate.toISOString()}`,
+  );
 
   try {
     await sendEvent(GROUP_JID, {
       name: WEEKLY_EVENT_NAME,
       description: WEEKLY_EVENT_DESCRIPTION,
       startTime: eventDate,
-      endTime
+      endTime,
     });
-    console.log('Weekly event sent successfully!');
+    logger.info("Weekly event sent successfully!");
   } catch (error) {
-    console.error('Failed to send weekly event:', error);
+    logger.error(error, "Failed to send weekly event");
+  }
+}
+
+function cleanOldAuthData() {
+  // Clean up old auth state if RESET_SESSION is true, should only be done on dev
+
+  if (fs.existsSync(AUTH_DIR)) {
+    logger.info("Resetting session - deleting auth state");
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+  } else {
+    logger.info("No old auth state to delete");
   }
 }
 
 async function main() {
-  console.log('Connecting to WhatsApp...');
+  logger.info("Connecting to WhatsApp...");
   await connectWhatsApp();
 
   // Schedule weekly event
-  console.log(`Weekly event scheduler: ${CRON_SCHEDULE}`);
+  logger.info(`Weekly event scheduler: ${CRON_SCHEDULE}`);
   cron.schedule(CRON_SCHEDULE, runWeeklyEvent);
 
   app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    logger.info(`Server running on http://localhost:${PORT}`);
   });
 }
 
