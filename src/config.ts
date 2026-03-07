@@ -7,7 +7,6 @@ export const PORT = process.env.PORT || 3000;
 export const GROUP_JID = process.env.GROUP_JID || "";
 export const LOG_GROUP_JID = process.env.LOG_GROUP_JID || "";
 export const AUTH_DIR = "./auth_info";
-export const RESET_SESSION = process.env.RESET_SESSION === "true";
 
 export const CRON_SCHEDULE = process.env.CRON_SCHEDULE || "0 11 * * 3";
 export const WEEKLY_EVENT_NAME = process.env.WEEKLY_EVENT_NAME || "Weekly Event";
