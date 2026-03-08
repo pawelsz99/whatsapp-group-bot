@@ -55,12 +55,25 @@ cp .env.example .env
 Set your `GROUP_JID` in `.env`:
 ```
 GROUP_JID=120363405829555887@g.us
+WEEKLY_EVENT_CRON_SCHEDULE=0 11 * * 3
+WEEKLY_EVENT_NAME=Weekly Event
+WEEKLY_EVENT_DESCRIPTION=Join us this week!
+WEEKLY_EVENT_HOUR=19
+WEEKLY_EVENT_MINUTE=0
 ```
+
+### Cron Schedule Examples
+
+- `0 11 * * 3` - Every Wednesday at 11:00 (default)
+- `0 18 * * 5` - Every Friday at 18:00
+- `0 10 * * 1` - Every Monday at 10:00
+
+See https://crontab.guru/ for more
 
 ### 4. Run
 
 ```bash
-mise run dev
+npm run dev
 ```
 
 ### 5. Connect WhatsApp
@@ -87,7 +100,7 @@ Visit http://localhost:3000 to:
 | GET | `/groups` | List all groups |
 | POST | `/send` | Send message |
 | POST | `/event` | Create custom event |
-| POST | `/event/weekly` | Create weekly event (next day 19:00) |
+| POST | `/api/weekly-event` | Create weekly event (next day configured time) |
 
 ### Examples
 
@@ -102,8 +115,8 @@ curl -X POST http://localhost:3000/event \
   -H "Content-Type: application/json" \
   -d '{"name": "Pizza Night", "description": "Bring snacks!", "startDate": "2026-03-15T19:00"}'
 
-# Create weekly event (tomorrow at 19:00)
-curl -X POST http://localhost:3000/event/weekly
+# Create weekly event (tomorrow at configured time)
+curl -X POST http://localhost:3000/api/weekly-event
 ```
 
 ## Event Request Format
@@ -149,9 +162,11 @@ fly deploy
 
 ## Troubleshooting
 
-### Bot disconnects
-- Check phone has internet
-- Re-scan QR code
+### Need new QR code
+- Stop the bot
+- Delete the `auth_info/` directory 
+- Restart the bot
+- Scan new QR code
 
 ### Event creation fails
 - Make sure group is in a Community
